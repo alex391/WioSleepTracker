@@ -1,14 +1,15 @@
 #include <Adafruit_SleepyDog.h>
 
-#include <seeed_graphics_base.h>
-#include <seeed_graphics_define.h>
-#include <seeed_line_chart.h>
+// #include <seeed_graphics_base.h>
+// #include <seeed_graphics_define.h>
+// #include <seeed_line_chart.h>
 
 #include "TFT_eSPI.h"
 TFT_eSPI tft;
 
 
-#define TIME_STRING_MAX 9  // Should be big enough to hold the time (so "00:00:00 AM\0")
+#define TIME_STRING_MAX 50  // Should be big enough to hold the time (so "00:00:00 AM\0") TODO: this is the wrong value
+#define SET_TIME_STRING_MAX 19 // Big enough to fit "Set the minute: 59\0"
 #define SLEEP_TIME_MS 1000 // How long sleepydog should sleep for
 #define SCREEN_ON_TIMEOUT 5 // After pressing WIO_KEY_A, how long the screen should be on for (will be on for SELEEP_TIME_MS * SCREEN_ON_TIMEOUT ms)
 
@@ -17,7 +18,7 @@ void setup() {
   tft.setRotation(3);
   tft.fillScreen(TFT_BLACK);
   tft.setTextColor(TFT_WHITE);
-  tft.setTextSize(4);
+  tft.setTextSize(2);
 
   pinMode(LED_BUILTIN, OUTPUT);  // For blinking when we do stuff
 
@@ -37,22 +38,16 @@ void setup() {
 
 }
 
-bool am = true; // true if it is AM
-unsigned int hours = 0; // 0-12
-unsigned int minutes = 0; 
-unsigned long seconds = 0;
-unsigned long msSinceStart = 0;
 
+unsigned long msSinceStart = 0;
 unsigned int backlightTimeout = 0;
 bool flashMode = false;
 void loop() {
   unsigned long start = millis(); // We need to keep track of how long these things take
-  minutes = (seconds / 60) % 60;
-  hours = (seconds / 3600) % 12;
-  hours = hours == 0 ? 12 : hours;
-  am = ((minutes / 60) % 24) < 12;
+
   toggleLed();
   drawTime();
+
   if (backlightTimeout > 0) {
     digitalWrite(LCD_BACKLIGHT, HIGH);
     backlightTimeout--;
@@ -76,15 +71,27 @@ void loop() {
   msSinceStart += slept + (end - start); // Time might get messed up if it runs for more than 50 days somehow... that's OK!
 }
 
+void setTime() {
+  digitalWrite(LCD_BACKLIGHT, HIGH);
+  // TODO: the rest of the function
+  tft.drawString("Set the hour: ", 0, 0);
+}
+
+// Draw the screen
 int minutesBefore = -1;
 void drawTime() {
+  unsigned long seconds = msSinceStart / 1000;
+  unsigned long minutes = (seconds / 60) % 60;
+  unsigned long hours = (seconds / 3600) % 12;
+  hours = hours == 0 ? 12 : hours;
+  bool am = ((minutes / 60) % 24) < 12;
   if (minutes == minutesBefore) {
     return; // no need to update screen (reduce flickering, sprites do weird things to sleepydog)
   }
   // draw the time
   tft.fillScreen(TFT_BLACK);
   char str[TIME_STRING_MAX];
-  int error = snprintf(str, TIME_STRING_MAX, "%.2d:%.2d %s", hours, minutes, am ? "AM" : "PM");
+  int error = snprintf(str, TIME_STRING_MAX, "h: %d m: %d s: %d ms: %d", hours, minutes, seconds, msSinceStart);
   if (error < 0) {
     sos();
   }
@@ -93,15 +100,17 @@ void drawTime() {
   minutesBefore = minutes;
 }
 
+// Interupt to show the time
 void showTimeInterrupt() {
   backlightTimeout = SCREEN_ON_TIMEOUT;
 }
 
-void flashModeInterrupt() {
+void flashModeInterrupt() { // for dev purposes, TODO: delete
   flashMode = true;
 }
 
-void sos() {  // For when things go irrecoverably wrong
+// For when things go irrecoverably wrong
+void sos() {
   const unsigned long shortDelay = 100;
   const unsigned long longDelay = shortDelay * 2;
   while (true) {
@@ -118,6 +127,7 @@ void sos() {  // For when things go irrecoverably wrong
   }
 }
 
+// Blink the LED
 void blink(unsigned long t) {
   digitalWrite(LED_BUILTIN, HIGH);
   delay(t);
@@ -125,6 +135,7 @@ void blink(unsigned long t) {
   delay(t);
 }
 
+// Toggle the LED
 uint32_t ledState = HIGH;
 void toggleLed() {
   ledState = ledState == LOW ? HIGH : LOW;
