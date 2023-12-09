@@ -62,7 +62,7 @@ void loop() {
 
   if (flashMode) {
     // for development purposes (will remove later)
-    // makes it easier to uplad things without hard reset
+    // makes it easier to upload things without hard reset
     while(true) {
       #if defined(USBCON) && !defined(USE_TINYUSB)
         USBDevice.attach();
