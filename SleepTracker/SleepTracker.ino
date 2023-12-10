@@ -1,3 +1,10 @@
+/*
+  Alex Leute
+  Wio Sleep Tracker
+*/
+
+
+
 #include <Adafruit_SleepyDog.h>
 
 // #include <seeed_graphics_base.h>
@@ -92,65 +99,18 @@ void setTime() {
   tft.setTextSize(2);
   digitalWrite(LCD_BACKLIGHT, HIGH);
 
-  int hour = 0;
-  int minute = 0;
+  
   bool am = true;
 
-  // FIXME: DRY
+  int hour = setTimeNumber(12, "Set the hour: %d", true);
+  int minute = setTimeNumber(60, "Set the minute: %d", false);
 
-  // set hours
-  bool redraw = true;
-  while(digitalRead(WIO_KEY_C) != LOW) {
-    if (digitalRead(WIO_5S_UP) == LOW) {
-      hour += 1;
-      hour = hour % 12;
-      redraw = true;
-    }
-    else if (digitalRead(WIO_5S_DOWN) == LOW) {
-      hour -= 1;
-      hour = positiveModulo(hour, 12);
-      redraw = true;
-    }
-    if (redraw) {
-      tft.fillScreen(TFT_BLACK);
-      char setHours[SET_TIME_STRING_MAX];
-      sosIfNegative(snprintf(setHours, SET_TIME_STRING_MAX, "Set the hour: %d", (hour == 0) ? 12 : hour));
-      tft.drawString(setHours, 0, 0);
-      redraw = false;
-    }
-    delay(100);
-  }
   if (DEBUG_MODE) {
     Serial.printf("set hours %d\n", hour);
-  }
-  while(digitalRead(WIO_KEY_C) == LOW); // Wait for you to release the C key
-  // set minutes
-  redraw = true;
-  while(digitalRead(WIO_KEY_C) != LOW) {
-    if (digitalRead(WIO_5S_UP) == LOW) {
-      minute += 1;
-      minute = minute % 60;
-      redraw = true;
-    }
-    else if (digitalRead(WIO_5S_DOWN) == LOW) {
-      minute -= 1;
-      minute = positiveModulo(minute, 60);
-      redraw = true;
-    }
-    if (redraw) {
-      tft.fillScreen(TFT_BLACK);
-      char setMinutes[SET_TIME_STRING_MAX];
-      sosIfNegative(snprintf(setMinutes, SET_TIME_STRING_MAX, "Set the minute: %d", minute));
-      tft.drawString(setMinutes, 0, 0);
-      redraw = false;
-    }
-    delay(100);
+    Serial.printf("set minute %d\n", minute);
   }
 
-  while(digitalRead(WIO_KEY_C) == LOW); // Wait for you to release the C key
-
-
-  redraw = true;
+  bool redraw = true;
   // set AM or PM
   while(digitalRead(WIO_KEY_C) != LOW) {
     if (digitalRead(WIO_5S_UP) == LOW || digitalRead(WIO_5S_DOWN) == LOW) {
@@ -167,14 +127,6 @@ void setTime() {
     delay(100);
   }
 
-
-  if (DEBUG_MODE) {
-    Serial.printf("set minutes %d\n", minute);
-    Serial.println(hour * 3600);
-    Serial.println(minute * 60);
-    Serial.println((hour * 3600 + minute * 60) * (1 * (int)pow(10, 6)));
-  }
-  
   if (!am) {
     hour += 12;
   }
@@ -185,6 +137,37 @@ void setTime() {
     Serial.println((long)seconds);
     Serial.println((long)usSinceStart);
   }
+}
+
+// Let the user pick a number (0 <= number < upperBounds) and display that number in %d of formatString
+// If noZero is true, then it will display upperBounds rather than 0
+int setTimeNumber(int upperBounds, const char* formatString, bool noZero) {
+  bool redraw = true;
+  int number = 0;
+  while(digitalRead(WIO_KEY_C) != LOW) {
+    if (digitalRead(WIO_5S_UP) == LOW) {
+      number += 1;
+      number = number % upperBounds;
+      redraw = true;
+    }
+    else if (digitalRead(WIO_5S_DOWN) == LOW) {
+      number -= 1;
+      number = positiveModulo(number, upperBounds);
+      redraw = true;
+    }
+    if (redraw) {
+      tft.fillScreen(TFT_BLACK);
+      char str[SET_TIME_STRING_MAX];
+      sosIfNegative(snprintf(str, SET_TIME_STRING_MAX, formatString, (number == 0 && noZero)? upperBounds : number));
+      tft.drawString(str, 0, 0);
+      redraw = false;
+    }
+    delay(100);
+  }
+
+  while(digitalRead(WIO_KEY_C) == LOW); // Wait for you to release the C key
+  return number;
+
 }
 
 
@@ -267,3 +250,9 @@ void toggleLed() {
   ledState = ledState == LOW ? HIGH : LOW;
   digitalWrite(LED_BUILTIN, ledState);
 }
+
+
+/*
+“I’m going to a commune in Vermont and will deal with no unit of time shorter than a season.”
+— Tracy Kidder
+*/
