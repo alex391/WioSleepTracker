@@ -106,8 +106,8 @@ void setTime() {
   
   bool am = true;
 
-  int hour = setTimeNumber(12, "Set the hour: %d", true);
-  int minute = setTimeNumber(60, "Set the minute: %d", false);
+  unsigned int hour = setTimeNumber(12, "Set the hour: %d", true);
+  unsigned int minute = setTimeNumber(60, "Set the minute: %d", false);
 
   if (DEBUG_MODE) {
     Serial.printf("set hours %d\n", hour);
@@ -145,7 +145,7 @@ void setTime() {
 
 // Let the user pick a number (0 <= number < upperBounds) and display that number in %d of formatString
 // If noZero is true, then it will display upperBounds rather than 0
-int setTimeNumber(int upperBounds, const char* formatString, bool noZero) {
+unsigned int setTimeNumber(unsigned int upperBounds, const char * formatString, bool noZero) {
   bool redraw = true;
   int number = 0;
   while(digitalRead(WIO_KEY_C) != LOW) {
@@ -202,7 +202,7 @@ void drawTime(uint64_t microseconds) {
 
 // Thanks https://stackoverflow.com/a/14997413 by Martin B https://stackoverflow.com/users/134877/martin-b
 // Strictly positive modulo, like '%' in Python
-int positiveModulo(int i, int n) {
+unsigned int positiveModulo(int i, int n) {
     return (i % n + n) % n;
 }
 
