@@ -18,10 +18,10 @@ TFT_eSPI tft;
 #define TIME_STRING_MAX 12  // Should be big enough to hold the time ("00:00:00 AM\0") 
 #define SET_TIME_STRING_MAX 20 // Big enough to fit "Set the minute: 59\0"
 
-#define SLEEP_TIME_MS 1000 // How long sleepydog should sleep for in ms
-#define SCREEN_ON_TIMEOUT 7 // After pressing WIO_KEY_A, how long the screen should be on for (will be on for SELEEP_TIME_MS * SCREEN_ON_TIMEOUT ms)
+#define SLEEP_TIME_MS 10000 // How long sleepydog should sleep for in ms
+#define SCREEN_ON_TIMEOUT 1 // After pressing WIO_KEY_A, how long the screen should be on for (will be on for SELEEP_TIME_MS * SCREEN_ON_TIMEOUT ms)
 
-#define DEBUG_MODE true // Disable sleepydog and a bunch of other annoyances while debugging when true
+#define DEBUG_MODE false // Disable sleepydog and a bunch of other annoyances while debugging when true
 
 
 void setup() {
@@ -88,6 +88,10 @@ void loop() {
   int slept = 0;
   if (!DEBUG_MODE) {
     slept = Watchdog.sleep(SLEEP_TIME_MS);
+  }
+  if (end < start) {
+    // Integer overflow of micros() detected (happens every 70 minutes)
+    end = start;
   }
   usSinceStart += slept * 1000 + (end - start);
 }
