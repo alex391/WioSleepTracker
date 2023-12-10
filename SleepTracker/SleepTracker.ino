@@ -12,14 +12,15 @@ TFT_eSPI tft;
 #define SET_TIME_STRING_MAX 25 // Big enough to fit "Set the minute: 59\0" TODO: this is the wrong value
 
 #define SLEEP_TIME_MS 1000 // How long sleepydog should sleep for
-#define SCREEN_ON_TIMEOUT 5 // After pressing WIO_KEY_A, how long the screen should be on for (will be on for SELEEP_TIME_MS * SCREEN_ON_TIMEOUT ms)
+#define SCREEN_ON_TIMEOUT 10 // After pressing WIO_KEY_A, how long the screen should be on for (will be on for SELEEP_TIME_MS * SCREEN_ON_TIMEOUT ms)
+
 
 void setup() {
   tft.begin();
   tft.setRotation(3);
   tft.fillScreen(TFT_BLACK);
   tft.setTextColor(TFT_WHITE);
-  tft.setTextSize(2);
+  tft.setTextSize(1);
 
   pinMode(LED_BUILTIN, OUTPUT);  // For blinking when we do stuff
 
@@ -45,14 +46,14 @@ void setup() {
 }
 
 
-unsigned long msSinceStart = 0; // actuall value will be set by setTime()
+uint64_t usSinceStart = 0; // actuall value will be set by setTime().
 unsigned int backlightTimeout = SCREEN_ON_TIMEOUT;
 bool flashMode = false;
 void loop() {
-  unsigned long start = millis(); // We need to keep track of how long these things take
+  unsigned long start = micros(); // We need to keep track of how long these things take
 
-  toggleLed();
-  drawTime();
+  toggleLed();  
+  drawTime(usSinceStart);
 
   if (backlightTimeout > 0) {
     digitalWrite(LCD_BACKLIGHT, HIGH);
@@ -72,15 +73,15 @@ void loop() {
       toggleLed();
     }
   }
-  unsigned long end = millis();
+  unsigned long end = micros(); 
   int slept = Watchdog.sleep(SLEEP_TIME_MS);
-  msSinceStart += slept + (end - start); // Time might get messed up if it runs for more than 50 days somehow... that's OK!
+  usSinceStart += slept * 1000 + (end - start);
 }
 
 void setTime() {
   digitalWrite(LCD_BACKLIGHT, HIGH);
 
-  int hour = 12;
+  int hour = 0;
   int minute = 0;
 
   // set hours
@@ -96,11 +97,10 @@ void setTime() {
       hour = positiveModulo(hour, 12);
       redraw = true;
     }
-    hour = (hour == 0) ? 12 : hour;
     if (redraw) {
       tft.fillScreen(TFT_BLACK);
       char setHours[SET_TIME_STRING_MAX];
-      sosIfNegative(snprintf(setHours, SET_TIME_STRING_MAX, "Set the hour: %d", hour));
+      sosIfNegative(snprintf(setHours, SET_TIME_STRING_MAX, "Set the hour: %d", (hour == 0) ? 12 : hour));
       tft.drawString(setHours, 0, 0);
       redraw = false;
     }
@@ -130,24 +130,24 @@ void setTime() {
     }
     delay(100);
   }
-  msSinceStart = hour * 3600000 + minute * 60000;
+  usSinceStart = (hour * 3600 + minute * 60) * 1000000;
 }
 
 // Draw the screen
 int minutesBefore = -1;
-void drawTime() {
-  unsigned long seconds = msSinceStart / 1000;
-  unsigned long minutes = (seconds / 60) % 60;
-  unsigned long hours = (seconds / 3600) % 12; 
+void drawTime(uint64_t microseconds) {
+  uint64_t seconds = microseconds / 1000000;
+  unsigned int minutes = (seconds / 60) % 60;
+  unsigned int hours = (seconds / 3600) % 12; 
   hours = hours == 0 ? 12 : hours;
   bool am = ((minutes / 60) % 24) < 12;
-  if (minutes == minutesBefore) {
-    return; // no need to update screen (reduce flickering, sprites do weird things to sleepydog)
-  }
+  // if (minutes == minutesBefore) {
+  //   return; // no need to update screen (reduce flickering, sprites do weird things to sleepydog)
+  // }
   // draw the time
   tft.fillScreen(TFT_BLACK);
   char str[TIME_STRING_MAX];
-  sosIfNegative(snprintf(str, TIME_STRING_MAX, "h: %d m: %d s: %d ms: %d", hours, minutes, seconds, msSinceStart));
+  sosIfNegative(snprintf(str, TIME_STRING_MAX, "%d", microseconds));
   tft.drawString(str, 0, 0);
 
   minutesBefore = minutes;
