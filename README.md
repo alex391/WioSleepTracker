@@ -2,8 +2,8 @@
 Sleep tracker for WIO terminal
 
 # TODO
-- [ ] Set the time
-  - [ ] UI
+- [x] Set the time
+  - [x] UI
 - [ ]  Set alarm
   - [ ] UI
 - [ ] Track movement

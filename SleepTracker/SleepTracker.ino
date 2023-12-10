@@ -8,19 +8,25 @@
 TFT_eSPI tft;
 
 
-#define TIME_STRING_MAX 50  // Should be big enough to hold the time (so "00:00:00 AM\0") TODO: this is the wrong value
-#define SET_TIME_STRING_MAX 25 // Big enough to fit "Set the minute: 59\0" TODO: this is the wrong value
+#define TIME_STRING_MAX 12  // Should be big enough to hold the time ("00:00:00 AM\0") 
+#define SET_TIME_STRING_MAX 20 // Big enough to fit "Set the minute: 59\0"
 
-#define SLEEP_TIME_MS 1000 // How long sleepydog should sleep for
-#define SCREEN_ON_TIMEOUT 10 // After pressing WIO_KEY_A, how long the screen should be on for (will be on for SELEEP_TIME_MS * SCREEN_ON_TIMEOUT ms)
+#define SLEEP_TIME_MS 1000 // How long sleepydog should sleep for in ms
+#define SCREEN_ON_TIMEOUT 7 // After pressing WIO_KEY_A, how long the screen should be on for (will be on for SELEEP_TIME_MS * SCREEN_ON_TIMEOUT ms)
+
+#define DEBUG_MODE true // Disable sleepydog and a bunch of other annoyances while debugging when true
 
 
 void setup() {
+  if (DEBUG_MODE) {
+    Serial.begin(115200);
+    while(!Serial);
+
+  }
   tft.begin();
   tft.setRotation(3);
   tft.fillScreen(TFT_BLACK);
   tft.setTextColor(TFT_WHITE);
-  tft.setTextSize(1);
 
   pinMode(LED_BUILTIN, OUTPUT);  // For blinking when we do stuff
 
@@ -35,18 +41,16 @@ void setup() {
 
   setTime(); // Need to do this before we set the interupts
 
-  // TODO: set the font size to something bigger for the clock display here
-
   attachInterrupt(digitalPinToInterrupt(WIO_KEY_C), showTimeInterrupt, FALLING);
   attachInterrupt(digitalPinToInterrupt(WIO_KEY_A), flashModeInterrupt, FALLING);
 
   digitalWrite(LCD_BACKLIGHT, LOW);
 
-
+  tft.setTextSize(6); // The text size for the clock face
 }
 
 
-uint64_t usSinceStart = 0; // actuall value will be set by setTime().
+uint64_t usSinceStart = 0; // Microseconds since the start. Actuall initial value will be set by setTime().
 unsigned int backlightTimeout = SCREEN_ON_TIMEOUT;
 bool flashMode = false;
 void loop() {
@@ -73,16 +77,26 @@ void loop() {
       toggleLed();
     }
   }
-  unsigned long end = micros(); 
-  int slept = Watchdog.sleep(SLEEP_TIME_MS);
+  unsigned long end = micros();
+  int slept = 0;
+  if (!DEBUG_MODE) {
+    slept = Watchdog.sleep(SLEEP_TIME_MS);
+  }
   usSinceStart += slept * 1000 + (end - start);
 }
 
 void setTime() {
+  if (DEBUG_MODE) {
+    Serial.println((long) usSinceStart);
+  }
+  tft.setTextSize(2);
   digitalWrite(LCD_BACKLIGHT, HIGH);
 
   int hour = 0;
   int minute = 0;
+  bool am = true;
+
+  // FIXME: DRY
 
   // set hours
   bool redraw = true;
@@ -105,7 +119,9 @@ void setTime() {
       redraw = false;
     }
     delay(100);
-
+  }
+  if (DEBUG_MODE) {
+    Serial.printf("set hours %d\n", hour);
   }
   while(digitalRead(WIO_KEY_C) == LOW); // Wait for you to release the C key
   // set minutes
@@ -130,24 +146,68 @@ void setTime() {
     }
     delay(100);
   }
-  usSinceStart = (hour * 3600 + minute * 60) * 1000000;
+
+  while(digitalRead(WIO_KEY_C) == LOW); // Wait for you to release the C key
+
+
+  redraw = true;
+  // set AM or PM
+  while(digitalRead(WIO_KEY_C) != LOW) {
+    if (digitalRead(WIO_5S_UP) == LOW || digitalRead(WIO_5S_DOWN) == LOW) {
+      am = !am;
+      redraw = true;
+    }
+    if (redraw) {
+      tft.fillScreen(TFT_BLACK);
+      char setAM[SET_TIME_STRING_MAX];
+      sosIfNegative(snprintf(setAM, SET_TIME_STRING_MAX, "Set AM or PM: %s", am ? "AM": "PM"));
+      tft.drawString(setAM, 0, 0);
+      redraw = false;
+    }
+    delay(100);
+  }
+
+
+  if (DEBUG_MODE) {
+    Serial.printf("set minutes %d\n", minute);
+    Serial.println(hour * 3600);
+    Serial.println(minute * 60);
+    Serial.println((hour * 3600 + minute * 60) * (1 * (int)pow(10, 6)));
+  }
+  
+  if (!am) {
+    hour += 12;
+  }
+  uint64_t seconds = (hour * 3600 + minute * 60);
+  usSinceStart = seconds * 1000000;
+
+  if (DEBUG_MODE) {
+    Serial.println((long)seconds);
+    Serial.println((long)usSinceStart);
+  }
 }
 
+
 // Draw the screen
-int minutesBefore = -1;
+unsigned int minutesBefore = 1;
 void drawTime(uint64_t microseconds) {
   uint64_t seconds = microseconds / 1000000;
-  unsigned int minutes = (seconds / 60) % 60;
-  unsigned int hours = (seconds / 3600) % 12; 
+  unsigned int minutes = ((int)seconds / 60) % 60;
+  unsigned int hours = ((int)seconds / 3600) % 12; 
   hours = hours == 0 ? 12 : hours;
-  bool am = ((minutes / 60) % 24) < 12;
-  // if (minutes == minutesBefore) {
-  //   return; // no need to update screen (reduce flickering, sprites do weird things to sleepydog)
-  // }
+  bool am = (((int)seconds / 3600) % 24) < 12;
+  if (DEBUG_MODE) {
+    char buff[200];
+    sosIfNegative(snprintf(buff, sizeof buff, "seconds: %d, hours: %d, minutes: %d, am: %d\n", (int)seconds, hours, minutes, am));
+    Serial.print(buff);
+  }
+  if (minutes == minutesBefore && !DEBUG_MODE) {
+    return; // no need to update screen (reduce flickering, sprites do weird things to sleepydog)
+  }
   // draw the time
   tft.fillScreen(TFT_BLACK);
   char str[TIME_STRING_MAX];
-  sosIfNegative(snprintf(str, TIME_STRING_MAX, "%d", microseconds));
+  sosIfNegative(snprintf(str, TIME_STRING_MAX, "%.2d:%.2d %s", hours, minutes, am ? "AM" : "PM"));
   tft.drawString(str, 0, 0);
 
   minutesBefore = minutes;
@@ -164,7 +224,7 @@ void showTimeInterrupt() {
   backlightTimeout = SCREEN_ON_TIMEOUT;
 }
 
-void flashModeInterrupt() { // for dev purposes, TODO: delete
+void flashModeInterrupt() { // For dev purposes
   flashMode = true;
 }
 
