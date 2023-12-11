@@ -3,33 +3,41 @@
   Wio Sleep Tracker
 */
 
-
-
+#include <LIS3DHTR.h>
 #include <Adafruit_SleepyDog.h>
-
-// #include <seeed_graphics_base.h>
-// #include <seeed_graphics_define.h>
-// #include <seeed_line_chart.h>
 
 #include "TFT_eSPI.h"
 TFT_eSPI tft;
 
+LIS3DHTR<TwoWire> lis;
 
 #define TIME_STRING_MAX 12  // Should be big enough to hold the time ("00:00:00 AM\0") 
 #define SET_TIME_STRING_MAX 20 // Big enough to fit "Set the minute: 59\0"
+#define HOURS_STRING_MAX 25 // Big enough for "Slept for %2.1f hours\0"
 
-#define SLEEP_TIME_MS 10000 // How long sleepydog should sleep for in ms
+#define SLEEP_TIME_MS 10000 // How long sleepydog should sleep for in ms.
+#define MAX_DATA_POINTS 8640 // number of SLEEP_TIME_MS intervals in a day
+
 #define SCREEN_ON_TIMEOUT 1 // After pressing WIO_KEY_A, how long the screen should be on for (will be on for SELEEP_TIME_MS * SCREEN_ON_TIMEOUT ms)
 
+// HACK: Can't use Serial and SleepyDog at the same time.
 #define DEBUG_MODE false // Disable sleepydog and a bunch of other annoyances while debugging when true
 
 
 void setup() {
+  
   if (DEBUG_MODE) {
     Serial.begin(115200);
     while(!Serial);
-
   }
+
+  lis.begin(Wire1);
+  if (!lis) {
+    sos();
+  }
+  lis.setOutputDataRate(LIS3DHTR_DATARATE_25HZ); //Data output rate
+  lis.setFullScaleRange(LIS3DHTR_RANGE_2G); //Scale range set to 2g
+
   tft.begin();
   tft.setRotation(3);
   tft.fillScreen(TFT_BLACK);
@@ -45,10 +53,12 @@ void setup() {
   pinMode(WIO_KEY_A, INPUT_PULLUP);
   pinMode(WIO_KEY_B, INPUT_PULLUP);
   pinMode(WIO_KEY_C, INPUT_PULLUP);
+  pinMode(WIO_MIC, INPUT);
 
   setTime(); // Need to do this before we set the interupts
 
   attachInterrupt(digitalPinToInterrupt(WIO_KEY_C), showTimeInterrupt, FALLING);
+  attachInterrupt(digitalPinToInterrupt(WIO_KEY_B), endSleepInterrupt, FALLING);
   attachInterrupt(digitalPinToInterrupt(WIO_KEY_A), flashModeInterrupt, FALLING);
 
   digitalWrite(LCD_BACKLIGHT, LOW);
@@ -57,14 +67,18 @@ void setup() {
 }
 
 
-uint64_t usSinceStart = 0; // Microseconds since the start. Actuall initial value will be set by setTime().
+unsigned long msSinceStart = 0; // Milliseconds since the start. Actuall initial value will be set by setTime().
 unsigned int backlightTimeout = SCREEN_ON_TIMEOUT;
 bool flashMode = false;
+bool endSleep = false;
+float accelrometerData[MAX_DATA_POINTS];
+uint32_t volumeData[MAX_DATA_POINTS];
+size_t dataPoint = 0; // index into data
 void loop() {
-  unsigned long start = micros(); // We need to keep track of how long these things take
+  unsigned long start = millis(); // We need to keep track of how long these things take
 
   toggleLed();  
-  drawTime(usSinceStart);
+  drawTime();
 
   if (backlightTimeout > 0) {
     digitalWrite(LCD_BACKLIGHT, HIGH);
@@ -84,21 +98,48 @@ void loop() {
       toggleLed();
     }
   }
-  unsigned long end = micros();
+
+  // Log acclerometer data and volume data:
+  if (dataPoint < MAX_DATA_POINTS) {
+    accelrometerData[dataPoint] = measureAcceleration();
+    volumeData[dataPoint] = measureVolume();
+    dataPoint++;
+  }
+
+  if (DEBUG_MODE) {
+    for (size_t i = 0; i < dataPoint; i++) {
+      Serial.print(accelrometerData[i]);
+      Serial.print(", ");
+    }
+    Serial.println();
+
+    for (size_t i = 0; i < dataPoint; i++) {
+      Serial.print(volumeData[i]);
+      Serial.print(", ");
+    }
+    Serial.println();
+  }
+
+  if (endSleep) {
+    end();
+  }
+  
+  unsigned long end = millis();
   int slept = 0;
   if (!DEBUG_MODE) {
     slept = Watchdog.sleep(SLEEP_TIME_MS);
   }
-  if (end < start) {
-    // Integer overflow of micros() detected (happens every 70 minutes)
-    end = start;
+  else {
+    slept = SLEEP_TIME_MS;
+    delay(SLEEP_TIME_MS);
   }
-  usSinceStart += slept * 1000 + (end - start);
+  msSinceStart += slept + (end - start);
 }
 
+// Set the time
 void setTime() {
   if (DEBUG_MODE) {
-    Serial.println((long) usSinceStart);
+    Serial.println(msSinceStart);
   }
   tft.setTextSize(2);
   digitalWrite(LCD_BACKLIGHT, HIGH);
@@ -124,7 +165,7 @@ void setTime() {
     if (redraw) {
       tft.fillScreen(TFT_BLACK);
       char setAM[SET_TIME_STRING_MAX];
-      sosIfNegative(snprintf(setAM, SET_TIME_STRING_MAX, "Set AM or PM: %s", am ? "AM": "PM"));
+      sosIfNegative(snprintf(setAM, SET_TIME_STRING_MAX, "Set AM or PM: %s", am? "AM": "PM"));
       tft.drawString(setAM, 0, 0);
       redraw = false;
     }
@@ -134,12 +175,12 @@ void setTime() {
   if (!am) {
     hour += 12;
   }
-  uint64_t seconds = (hour * 3600 + minute * 60);
-  usSinceStart = seconds * 1000000;
+  unsigned int seconds = hour * 3600 + minute * 60;
+  msSinceStart = seconds * 1000;
 
   if (DEBUG_MODE) {
-    Serial.println((long)seconds);
-    Serial.println((long)usSinceStart);
+    Serial.println(seconds);
+    Serial.println(msSinceStart);
   }
 }
 
@@ -171,21 +212,19 @@ unsigned int setTimeNumber(unsigned int upperBounds, const char * formatString, 
 
   while(digitalRead(WIO_KEY_C) == LOW); // Wait for you to release the C key
   return number;
-
 }
-
 
 // Draw the screen
 unsigned int minutesBefore = 1;
-void drawTime(uint64_t microseconds) {
-  uint64_t seconds = microseconds / 1000000;
-  unsigned int minutes = ((int)seconds / 60) % 60;
-  unsigned int hours = ((int)seconds / 3600) % 12; 
+void drawTime() {
+  unsigned int seconds = msSinceStart / 1000;
+  unsigned int minutes = (seconds / 60) % 60;
+  unsigned int hours = (seconds / 3600) % 12; 
   hours = hours == 0 ? 12 : hours;
-  bool am = (((int)seconds / 3600) % 24) < 12;
+  bool am = ((seconds / 3600) % 24) < 12;
   if (DEBUG_MODE) {
     char buff[200];
-    sosIfNegative(snprintf(buff, sizeof buff, "seconds: %d, hours: %d, minutes: %d, am: %d\n", (int)seconds, hours, minutes, am));
+    sosIfNegative(snprintf(buff, sizeof buff, "seconds: %d, hours: %d, minutes: %d, am: %d\n", seconds, hours, minutes, am));
     Serial.print(buff);
   }
   if (minutes == minutesBefore && !DEBUG_MODE) {
@@ -198,6 +237,81 @@ void drawTime(uint64_t microseconds) {
   tft.drawString(str, 0, 0);
 
   minutesBefore = minutes;
+}
+
+// Measure the acceleration
+float measureAcceleration() {
+  float z = lis.getAccelerationZ();
+  if (DEBUG_MODE) {
+    Serial.print("Z: ");
+    Serial.println(z);
+  }
+  return z;
+}
+
+// Measure the volume
+uint32_t measureVolume() {
+  uint32_t volume = analogRead(WIO_MIC);
+  if (DEBUG_MODE) {
+    Serial.print("Volume: ");
+    Serial.println(volume);
+  }
+  return volume;
+}
+
+
+// The function that runs at the end of the program
+// Display the data collected throughout the night
+void end() {
+  unsigned long endTime = msSinceStart;
+  digitalWrite(LCD_BACKLIGHT, HIGH);
+  tft.fillScreen(TFT_BLACK);
+
+  // BUG: There's an off by one error here that makes the graph not take up the whole screen
+  // FIXME: DRY
+  size_t i = 0;
+  const long acclerometerMax = 204;
+  const long acclerometerMin = -204;
+  // due to screen orientation, height and width are flipped for TFT_WIDTH and TFT_HEIGHT
+  int32_t previousPointY = map((long)(accelrometerData[i] * 100.0f), acclerometerMin, acclerometerMax, 0, TFT_WIDTH); // accelerometer data will be from roughly -2G to 2G, and map it to the height of the screen
+  int32_t previousPointX = map((long)i, 0, dataPoint, 0, TFT_HEIGHT);
+  i++;
+  for (; i < dataPoint; i++) {
+    int32_t pointY = map((long)(accelrometerData[i] * 100.0f), acclerometerMin, acclerometerMax, 0, TFT_WIDTH);
+    int32_t pointX = map((long)i, 0, dataPoint, 0, TFT_HEIGHT);
+    if (DEBUG_MODE) {
+      Serial.printf("plotting from (%d, %d) to (%d, %d)\n", previousPointX, previousPointY, pointX, pointY);
+    }
+    tft.drawLine(previousPointX, previousPointY, pointX, pointY, TFT_GREEN);
+    previousPointY = pointY;
+    previousPointX = pointX;
+  }
+
+  i = 0;
+  const long micMin = 0;
+  const long micMax = 1023;
+  previousPointY = map((long)volumeData[i], micMin, micMax, 0, TFT_WIDTH);
+  previousPointX = map((long)i, 0, dataPoint, 0, TFT_HEIGHT);
+  i++;
+  for (; i < dataPoint; i++) {
+    int32_t pointY = map((long)volumeData[i], micMin, micMax, 0, TFT_WIDTH);
+    int32_t pointX = map((long)i, 0, dataPoint, 0, TFT_HEIGHT);
+    if (DEBUG_MODE) {
+      Serial.printf("plotting from (%d, %d) to (%d, %d)\n", previousPointX, previousPointY, pointX, pointY);
+    }
+    tft.drawLine(previousPointX, previousPointY, pointX, pointY, TFT_BLUE);
+    previousPointY = pointY;
+    previousPointX = pointX;
+  }
+
+  // Draw the number of hours on the scren
+  float hours = (float)endTime / 3600000.0f;
+  tft.setTextSize(2);
+  char str[HOURS_STRING_MAX];
+  sosIfNegative(snprintf(str, HOURS_STRING_MAX, "Slept for %2.1f hours", hours));
+  tft.drawString(str,0 ,0 );
+
+  while(true); // Loop forever at the end of the program
 }
 
 // Thanks https://stackoverflow.com/a/14997413 by Martin B https://stackoverflow.com/users/134877/martin-b
@@ -213,6 +327,11 @@ void showTimeInterrupt() {
 
 void flashModeInterrupt() { // For dev purposes
   flashMode = true;
+}
+
+// Interupt to end sleep and display the data
+void endSleepInterrupt() {
+  endSleep = true;
 }
 
 // For error checking (mostly snprintf)

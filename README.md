@@ -6,6 +6,10 @@ Sleep tracker for WIO terminal
   - [x] UI
 - [ ]  Set alarm
   - [ ] UI
-- [ ] Track movement
-- [ ] Track sound
-- [ ] Display graph after alarm goes off
+- [x] Track movement
+- [x] Track sound
+- [x] Display graph after alarm goes off
+- [ ] Build instructions
+# Known bugs:
+- Clicking the C key might make the time less accurate
+- Graph doesn't go all the way to the edge of the screen
