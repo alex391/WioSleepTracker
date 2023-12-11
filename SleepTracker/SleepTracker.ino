@@ -87,6 +87,7 @@ void loop() {
     digitalWrite(LCD_BACKLIGHT, LOW);
   }
 
+  // TODO: remove flashMode
   if (flashMode) {
     // for development purposes (will remove later)
     // makes it easier to upload things without hard reset
