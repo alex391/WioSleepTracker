@@ -1,20 +1,15 @@
 # WioSleepTracker
 Sleep tracker for WIO terminal
 
-# TODO
-- [x] Set the time
-  - [x] UI
-- [ ]  Set alarm
-  - [ ] UI
-- [x] Track movement
-- [x] Track sound
-- [x] Display graph after alarm goes off
-- [ ] Build instructions
-
 # Install
 Libraries needed:  
-- [https://github.com/Seeed-Studio/Seeed_Arduino_LIS3DHTR/tree/master](https://github.com/Seeed-Studio/Seeed_Arduino_LIS3DHTR/tree/master)
+- [Seeed Arduino LIS3DHTR](https://github.com/Seeed-Studio/Seeed_Arduino_LIS3DHTR/tree/master)
+- [Adafruit SleepyDog](https://github.com/adafruit/Adafruit_SleepyDog)
+- [Seeed Arduino LCD (TFT_eSPI.h)](https://github.com/Seeed-Studio/Seeed_Arduino_LCD)
+
+# Parts needed
+- [Seeed studio WIO Terminal](https://wiki.seeedstudio.com/Wio_Terminal_Intro/)
+- [Any USB battery pack](https://www.amazon.com/s?k=usb+battery+pack) because the first-party one doesn't last all night
 
 # Known bugs
 - Clicking the C key might make the time less accurate
-- Graph doesn't go all the way to the edge of the screen

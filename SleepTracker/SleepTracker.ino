@@ -21,9 +21,9 @@ LIS3DHTR<TwoWire> lis;
 #define SCREEN_ON_TIMEOUT 1 // After pressing WIO_KEY_A, how long the screen should be on for (will be on for SELEEP_TIME_MS * SCREEN_ON_TIMEOUT ms)
 
 // HACK: Can't use Serial and SleepyDog at the same time.
-#define DEBUG_MODE true // Disable sleepydog and a bunch of other annoyances while debugging when true
+#define DEBUG_MODE false // Disable sleepydog and a bunch of other annoyances while debugging when true
 
-#define MUTE true // If mute is true, don't play sounds
+#define MUTE false // If mute is true, don't play sounds
 
 
 void setup() {
@@ -48,12 +48,13 @@ void setup() {
   pinMode(LED_BUILTIN, OUTPUT);  // For blinking when we do stuff
 
   pinMode(WIO_5S_UP, INPUT_PULLUP);
-  pinMode(WIO_5S_LEFT, INPUT_PULLUP);
+  pinMode(WIO_5S_DOWN, INPUT_PULLUP);
   pinMode(WIO_KEY_C, INPUT_PULLUP);
   pinMode(WIO_KEY_B, INPUT_PULLUP);
+
   pinMode(WIO_MIC, INPUT);
 
-  setTime(); // Need to do this before we set the interupts
+  setTime(); // Need to do this before we set the interrupts
 
   attachInterrupt(digitalPinToInterrupt(WIO_KEY_C), showTimeInterrupt, FALLING);
   attachInterrupt(digitalPinToInterrupt(WIO_KEY_B), endSleepInterrupt, FALLING);
@@ -64,10 +65,9 @@ void setup() {
 }
 
 
-// NOTE: unsigned long, unsigned int, size_t, and uint32_t are probably all 32 bit unsigned integers.
-// Using whatever type is returned or given to functions, or whatever is most clear (usually unsigned int but sometimes others)
-unsigned long msSinceStart = 0; // Milliseconds since the start. Actuall initial value will be set by setTime().
+unsigned long msSinceStart = 0; // Milliseconds since the start. Actual initial value will be set by setTime().
 unsigned long startTimeMs = 0; // The first time (the time you set the clock to)
+unsigned long alarmTimeMs = 0; // The time the alarm is set to
 unsigned int backlightTimeout = SCREEN_ON_TIMEOUT;
 bool flashMode = false;
 bool endSleep = false;
@@ -87,7 +87,7 @@ void loop() {
     digitalWrite(LCD_BACKLIGHT, LOW);
   }
 
-  // Log acclerometer data and volume data:
+  // Log accelerometer data and volume data:
   if (dataPoint < MAX_DATA_POINTS) {
     accelrometerData[dataPoint] = measureAcceleration();
     volumeData[dataPoint] = measureVolume();
@@ -109,6 +109,10 @@ void loop() {
   }
 
   if (endSleep) {
+    end();
+  }
+
+  if (msSinceStart >= alarmTimeMs) {
     end();
   }
   
@@ -164,6 +168,12 @@ void setTime() {
     Serial.printf("set hours for alarm %d\n", alarmHour);
     Serial.printf("set minute for alarm %d\n", alarmMinute);
   }
+  unsigned int alarmTimeSeconds = alarmHour * 3600 + alarmMinute * 60;
+  alarmTimeMs = alarmTimeSeconds * 1000;
+
+  if (DEBUG_MODE) {
+    Serial.printf("Alarm time is: %d", alarmTimeMs);
+  }
 
 
 }
@@ -172,18 +182,21 @@ void setTime() {
 // Let the user pick a number (0 <= number < upperBounds) and display that number in %d of formatString
 // If noZero is true, then it will display upperBounds rather than 0
 unsigned int setTimeNumber(unsigned int upperBounds, const char * formatString, bool noZero) {
-  if (DEBUG_MODE) {
-    Serial.println("setTimeNumber");
-  }
   bool redraw = true;
   int number = 0;
-  while(digitalRead(WIO_KEY_C) == HIGH) {
+  while(digitalRead(WIO_KEY_C) != LOW) {
     if (digitalRead(WIO_5S_UP) == LOW) {
+      if (DEBUG_MODE) {
+        Serial.println(digitalRead(WIO_5S_UP));
+      }
       number += 1;
       number = number % upperBounds;
       redraw = true;
     }
     else if (digitalRead(WIO_5S_DOWN) == LOW) {
+      if (DEBUG_MODE) {
+        Serial.println(digitalRead(WIO_5S_UP));
+      }
     
       number -= 1;
       number = positiveModulo(number, upperBounds);
@@ -232,7 +245,7 @@ bool setAM() {
 }
 
 // Draw the screen
-unsigned int minutesBefore = 61; // initial value is an impossible minute (so that )
+unsigned int minutesBefore = 61; // initial value is an impossible minute (so that it immediately redraws)
 void drawTime() {
   unsigned int seconds = msSinceStart / 1000;
   unsigned int minutes = (seconds / 60) % 60;
@@ -283,7 +296,7 @@ void end() {
   digitalWrite(LCD_BACKLIGHT, HIGH);
   tft.fillScreen(TFT_BLACK);
 
-  // FIXME: DRY. Diffucult because the two data arrays are different types, but could use a template
+  // FIXME: DRY. Difficult because the two data arrays are different types, but could use a template
   size_t i = 0;
   const long acclerometerMax = 204; // Value empirically determined by shaking the WIO Terminal really hard
   const long acclerometerMin = -204;
@@ -320,7 +333,7 @@ void end() {
   }
 
   unsigned long totalTime = msSinceStart - startTimeMs;
-  // Draw the number of hours on the scren
+  // Draw the number of hours on the screen
   float hours = (float)totalTime / 3600000.0f;
   tft.setTextSize(2);
   char str[HOURS_STRING_MAX];
@@ -347,12 +360,12 @@ unsigned int positiveModulo(int i, int n) {
     return (i % n + n) % n;
 }
 
-// Interupt to show the time
+// Interrupt to show the time
 void showTimeInterrupt() {
   backlightTimeout = SCREEN_ON_TIMEOUT;
 }
 
-// Interupt to end sleep and display the data
+// Interrupt to end sleep and display the data
 void endSleepInterrupt() {
   endSleep = true;
 }
@@ -397,6 +410,7 @@ void toggleLed() {
   digitalWrite(LED_BUILTIN, ledState);
 }
 
+// Play a tone
 void playTone(unsigned int tone, uint32_t duration) {
   if (!MUTE) {
     for (uint32_t i = 0; i < duration * 1000; i += tone * 2) {
