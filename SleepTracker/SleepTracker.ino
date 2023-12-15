@@ -23,7 +23,7 @@ LIS3DHTR<TwoWire> lis;
 // HACK: Can't use Serial and SleepyDog at the same time.
 #define DEBUG_MODE false // Disable sleepydog and a bunch of other annoyances while debugging when true
 
-#define MUTE true // If mute is true, don't play sounds
+#define MUTE false // If mute is true, don't play sounds
 
 
 void setup() {
@@ -306,11 +306,11 @@ void end() {
   const long acclerometerMin = -204;
   // due to screen orientation, height and width are flipped for TFT_WIDTH and TFT_HEIGHT
   int32_t previousPointY = map((long)(accelrometerData[i] * 100.0f), acclerometerMin, acclerometerMax, 0, TFT_WIDTH); // accelerometer data will be from roughly -2G to 2G, and map it to the height of the screen
-  int32_t previousPointX = map((long)i, 0, dataPoint - 1, 0, TFT_HEIGHT);
+  int32_t previousPointX = map(i, 0, dataPoint - 1, 0, TFT_HEIGHT);
   i++;
   for (; i < dataPoint; i++) {
     int32_t pointY = map((long)(accelrometerData[i] * 100.0f), acclerometerMin, acclerometerMax, 0, TFT_WIDTH);
-    int32_t pointX = map((long)i, 0, dataPoint - 1, 0, TFT_HEIGHT);
+    int32_t pointX = map(i, 0, dataPoint - 1, 0, TFT_HEIGHT);
     if (DEBUG_MODE) {
       Serial.printf("plotting from (%d, %d) to (%d, %d)\n", previousPointX, previousPointY, pointX, pointY);
     }
@@ -323,11 +323,11 @@ void end() {
   const long micMin = 0;
   const long micMax = 1023;
   previousPointY = map((long)volumeData[i], micMin, micMax, 0, TFT_WIDTH);
-  previousPointX = map((long)i, 0, dataPoint - 1, 0, TFT_HEIGHT);
+  previousPointX = map(i, 0, dataPoint - 1, 0, TFT_HEIGHT);
   i++;
   for (; i < dataPoint; i++) {
-    int32_t pointY = map((long)volumeData[i], micMin, micMax, 0, TFT_WIDTH);
-    int32_t pointX = map((long)i, 0, dataPoint - 1, 0, TFT_HEIGHT);
+    int32_t pointY = map(volumeData[i], micMin, micMax, 0, TFT_WIDTH);
+    int32_t pointX = map(i, 0, dataPoint - 1, 0, TFT_HEIGHT);
     if (DEBUG_MODE) {
       Serial.printf("plotting from (%d, %d) to (%d, %d)\n", previousPointX, previousPointY, pointX, pointY);
     }
