@@ -23,7 +23,7 @@ LIS3DHTR<TwoWire> lis;
 // HACK: Can't use Serial and SleepyDog at the same time.
 #define DEBUG_MODE false // Disable sleepydog and a bunch of other annoyances while debugging when true
 
-#define MUTE false // If mute is true, don't play sounds
+#define MUTE true // If mute is true, don't play sounds
 
 
 void setup() {
@@ -170,6 +170,10 @@ void setTime() {
   }
   unsigned int alarmTimeSeconds = alarmHour * 3600 + alarmMinute * 60;
   alarmTimeMs = alarmTimeSeconds * 1000;
+
+  if (alarmTimeMs < msSinceStart) {
+    alarmTimeMs += 86400000; // So that the alarm doesn't immediately go off add 1 day
+  }
 
   if (DEBUG_MODE) {
     Serial.printf("Alarm time is: %d", alarmTimeMs);
