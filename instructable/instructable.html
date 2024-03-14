@@ -24,14 +24,14 @@
 
     $(document).ready(function () {
       $.ajax({ // Thanks to https://stackoverflow.com/a/19325006
-        async: false,
+        async: true,
         url: '../SleepTracker/SleepTracker.ino',
         dataType: 'text',
         success: function (data) {
           $('#sketch').append(escapeHtml(data));
+          hljs.highlightAll();
         }
       });
-      hljs.highlightAll();
     });
   </script>
   <link rel="stylesheet" href="styles.css">
