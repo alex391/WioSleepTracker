@@ -2,10 +2,19 @@ body {
     font-family: sans-serif;
 }
 
-video {
-    max-width: 100%;
+video, img {
+    max-width: 50%;
 }
 
-img {
-    max-width: 50%;
+pre {
+    max-width: 100%;
+    max-height: 500px;
+    overflow: scroll;
+}
+
+@media screen and (max-width: 700px) {
+    video, img {
+        max-width: 100%;
+    }
+    
 }
