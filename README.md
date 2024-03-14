@@ -1,6 +1,9 @@
 # WioSleepTracker
 Sleep tracker for WIO terminal
 
+# Instructable
+Click [here](instructable/instructable.html) to see instructions, and a demo.
+
 # Install
 Libraries needed:  
 - [Seeed Arduino LIS3DHTR](https://github.com/Seeed-Studio/Seeed_Arduino_LIS3DHTR/tree/master)
